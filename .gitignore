@@ -23,3 +23,7 @@ coverage/
 **/android/local.properties
 **/.env
 !**/.env.example
+
+*.tsbuildinfo
+**/dist/
+

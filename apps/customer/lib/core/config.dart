@@ -1,11 +1,10 @@
 import 'dart:io';
 
 class AppConfig {
-  /// Fixed Cloudflare hostname for Deliveria API (named tunnel, not quick tunnel).
-  /// Override at build time with `--dart-define=API_BASE=https://...` if needed.
+  /// Cloud-hosted Deliveria API (Render). Override with `--dart-define=API_BASE=...`.
   static const hostedApiBase = String.fromEnvironment(
     'API_BASE',
-    defaultValue: 'https://deliveria.tembmail.com',
+    defaultValue: 'https://deliveria-api.onrender.com',
   );
 
   static int _baseIndex = 0;

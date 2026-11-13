@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+.env.*
+uploads
+private-uploads
+data
+secrets
+*.log
+scripts/embedded-db.mjs
+coverage
+.DS_Store

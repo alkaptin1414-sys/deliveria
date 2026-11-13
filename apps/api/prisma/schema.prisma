@@ -1,0 +1,949 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountType {
+  PERSONAL
+  BUSINESS
+}
+
+enum UserRole {
+  CUSTOMER
+  COURIER
+  ADMIN
+}
+
+enum BusinessCategory {
+  PHARMACY
+  RESTAURANT
+  SUPERMARKET
+  CLOTHING
+  PHONES
+  ACCESSORIES
+  BAKERY
+  COSMETICS
+  ECOMMERCE
+  BOOKSTORE
+  LAUNDRY
+  OTHER
+}
+
+enum MemberRole {
+  OWNER
+  STAFF
+}
+
+enum AddressLabel {
+  HOME
+  WORK
+  SHOP
+  OTHER
+}
+
+enum OrderStatus {
+  SEARCHING
+  ACCEPTED
+  EN_ROUTE_PICKUP
+  PICKED_UP
+  EN_ROUTE_DROPOFF
+  DELIVERED
+  CANCELLED
+  NO_COURIER
+}
+
+enum VehicleType {
+  MOTORCYCLE
+  CAR
+}
+
+enum PaymentMethod {
+  CASH
+  WALLET
+  CARD
+}
+
+enum PaymentState {
+  NOT_REQUIRED
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+}
+
+enum DeliveryPayer {
+  RECIPIENT
+  BUSINESS
+}
+
+enum SettlementStatus {
+  NOT_REQUIRED
+  PENDING_COLLECTION
+  COLLECTED
+  AWAITING_SETTLEMENT
+  PARTIAL
+  SETTLED
+  DISPUTED
+}
+
+enum TicketKind {
+  ORDER
+  COURIER
+  COLLECTION
+  LATE
+  DAMAGED
+  MISSING
+  OTHER
+}
+
+enum TicketStatus {
+  OPEN
+  IN_REVIEW
+  NEEDS_INFO
+  RESOLVED
+  CLOSED
+}
+
+enum ParcelSize {
+  SMALL
+  MEDIUM
+  LARGE
+}
+
+enum NotificationType {
+  ORDER_CREATED
+  SEARCHING
+  ORDER_ACCEPTED
+  COURIER_TO_PICKUP
+  PICKED_UP
+  COURIER_NEAR_DROPOFF
+  DELIVERED
+  ORDER_CANCELLED
+  NO_COURIER
+  CHAT_MESSAGE
+  TICKET_UPDATED
+  SETTLEMENT
+}
+
+enum ActorType {
+  CUSTOMER
+  COURIER
+  SYSTEM
+  SUPPORT
+}
+
+model User {
+  id          String       @id @default(uuid())
+  phone        String?      @unique
+  email        String?      @unique
+  passwordHash String?
+  name         String?
+  accountType AccountType?
+  role        UserRole     @default(CUSTOMER)
+  avatarUrl   String?
+  locale      String       @default("ar")
+  notifOrders Boolean      @default(true)
+  notifChat   Boolean      @default(true)
+  suspendedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  sessions             RefreshSession[]
+  businessMemberships  BusinessMember[]
+  addresses            Address[]
+  orders               DeliveryOrder[]
+  notifications        Notification[]
+  reviews              Review[]
+  tickets              SupportTicket[]
+  recipients           SavedRecipient[]
+  otpChallenges        OtpChallenge[]
+  deviceTokens         DeviceToken[]
+  carts                Cart[]
+  foodOrders           FoodOrder[]
+  restaurantReviews    RestaurantReview[]
+  restaurantMemberships RestaurantMember[]
+  courierProfile       CourierProfile?
+  courierDocuments     CourierDocument[]
+}
+
+model OtpChallenge {
+  id         String    @id @default(uuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
+
+  @@index([phone, createdAt])
+}
+
+model RefreshSession {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model BusinessProfile {
+  id           String           @id @default(uuid())
+  name         String
+  category     BusinessCategory
+  managerName  String
+  phone        String
+  addressLine  String
+  details      String?
+  lat          Float
+  lng          Float
+  governorate  String?
+  city         String?
+  area         String?
+  logoUrl      String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  members     BusinessMember[]
+  addresses   Address[]
+  orders      DeliveryOrder[]
+  recipients  SavedRecipient[]
+  ledger      LedgerEntry[]
+  settlements SettlementBatch[]
+}
+
+model BusinessMember {
+  id         String          @id @default(uuid())
+  businessId String
+  business   BusinessProfile @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       MemberRole
+  createdAt  DateTime        @default(now())
+
+  @@unique([businessId, userId])
+}
+
+model Address {
+  id          String           @id @default(uuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessId  String?
+  business    BusinessProfile? @relation(fields: [businessId], references: [id])
+  label       AddressLabel
+  name        String
+  governorate String
+  city        String
+  area        String
+  line        String
+  details     String?
+  phone       String?
+  lat         Float
+  lng          Float
+  isDefault   Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([userId])
+}
+
+model DeliveryOrder {
+  id                 String          @id @default(uuid())
+  publicNumber       String          @unique
+  idempotencyKey     String          @unique
+  userId             String
+  user               User            @relation(fields: [userId], references: [id])
+  businessId         String?
+  business           BusinessProfile? @relation(fields: [businessId], references: [id])
+  accountType        AccountType
+  status             OrderStatus
+  pickupName         String
+  pickupLine         String
+  pickupDetails      String?
+  pickupLat          Float
+  pickupLng          Float
+  dropoffName        String
+  dropoffLine        String
+  dropoffDetails     String?
+  dropoffLat         Float
+  dropoffLng         Float
+  recipientName      String
+  recipientPhone     String
+  parcelType         String
+  parcelDescription  String
+  notes              String?
+  photoUrl           String?
+  size               ParcelSize
+  fragile            Boolean         @default(false)
+  vehicle            VehicleType
+  distanceMeters     Int
+  feeMinor           Int
+  platformMinor      Int             @default(0)
+  platformBps        Int?
+  serviceFeeMinor    Int             @default(0)
+  extraMinor         Int
+  totalMinor         Int
+  currency           String          @default("EGP")
+  etaMinutes         Int
+  paymentMethod      PaymentMethod
+  paymentState       PaymentState
+  goodsMinor         Int             @default(0)
+  goodsPrepaid       Boolean         @default(false)
+  collectGoods       Boolean         @default(false)
+  deliveryPayer      DeliveryPayer   @default(RECIPIENT)
+  collectMinor       Int             @default(0)
+  businessDueMinor   Int             @default(0)
+  shopDeliveryChargeMinor Int        @default(0)
+  settledMinor       Int             @default(0)
+  settlementStatus   SettlementStatus @default(NOT_REQUIRED)
+  cancelFeeMinor     Int             @default(0)
+  cancelCode         String?
+  courierId          String?
+  courierName        String?
+  courierPhone       String?
+  courierAvatarUrl   String?
+  courierVehicle     VehicleType?
+  courierPlate       String?
+  courierRating      Float?
+  preferredCourierId String?
+  preferredCourierName String?
+  deliveryCodeHash   String?
+  deliveryCodeEnc    String?
+  deliveryCodeUsedAt DateTime?
+  deliveredAt        DateTime?
+  cancelledAt        DateTime?
+  cancelReason       String?
+  pricingVersion     Int
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  history       OrderStatusHistory[]
+  assignment    CourierAssignment?
+  messages      ChatMessage[]
+  review        Review?
+  proof         DeliveryProof?
+  notifications Notification[]
+  collection    CollectionRecord?
+  ledger        LedgerEntry[]
+  cancellation  OrderCancellation?
+  settlements   SettlementItem[]
+  foodOrder     FoodOrder?
+  courierOffers CourierOffer[]
+  courierEarning CourierEarning?
+
+  @@index([userId, status])
+  @@index([courierId, status])
+  @@index([status])
+}
+
+model OrderStatusHistory {
+  id        String        @id @default(uuid())
+  orderId   String
+  order     DeliveryOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  actor     ActorType
+  note      String?
+  createdAt DateTime      @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model CourierAssignment {
+  id         String        @id @default(uuid())
+  orderId    String        @unique
+  order      DeliveryOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courierId  String
+  acceptedAt DateTime      @default(now())
+  lat        Float?
+  lng        Float?
+  updatedAt  DateTime      @updatedAt
+}
+
+model PricingRule {
+  id                    Int           @id @default(autoincrement())
+  vehicle               VehicleType   @unique
+  baseFeeMinor          Int
+  perKmMinor            Int
+  minFeeMinor           Int
+  maxDistanceMeters     Int
+  fragileSurchargeMinor Int
+  mediumSurchargeMinor  Int
+  largeSurchargeMinor   Int
+  maxWeightKg           Int
+  allowedSizes          ParcelSize[]
+  active                Boolean       @default(true)
+  version               Int           @default(1)
+}
+
+model ServiceArea {
+  id          String  @id @default(uuid())
+  name        String
+  minLat      Float
+  maxLat      Float
+  minLng      Float
+  maxLng      Float
+  motorcycles Boolean @default(true)
+  cars        Boolean @default(true)
+  active      Boolean @default(true)
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     DeliveryOrder?   @relation(fields: [orderId], references: [id])
+  type      NotificationType
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model ChatMessage {
+  id        String        @id @default(uuid())
+  orderId   String
+  order     DeliveryOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sender    ActorType
+  senderId  String
+  body      String
+  createdAt DateTime      @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+enum ReviewStatus {
+  PUBLISHED
+  EXCLUDED
+}
+
+model Review {
+  id              String        @id @default(uuid())
+  orderId         String        @unique
+  order           DeliveryOrder @relation(fields: [orderId], references: [id])
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  courierId       String
+  rating          Int
+  tags            String[]
+  comment         String?
+  status          ReviewStatus  @default(PUBLISHED)
+  excludedReason  String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  reports         ReviewReport[]
+
+  @@index([courierId, status])
+}
+
+model ReviewReport {
+  id        String   @id @default(uuid())
+  reviewId  String
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  userId    String
+  reason    String
+  createdAt DateTime @default(now())
+
+  @@unique([reviewId, userId])
+}
+
+model DeliveryProof {
+  id        String        @id @default(uuid())
+  orderId   String        @unique
+  order     DeliveryOrder @relation(fields: [orderId], references: [id])
+  method    String
+  note      String?
+  createdAt DateTime      @default(now())
+}
+
+model SavedRecipient {
+  id         String           @id @default(uuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessId String?
+  business   BusinessProfile? @relation(fields: [businessId], references: [id])
+  name       String
+  phone      String
+  line       String?
+  details    String?
+  lat        Float?
+  lng        Float?
+  notes      String?
+  consentAt  DateTime
+  createdAt  DateTime         @default(now())
+
+  @@index([businessId, phone])
+}
+
+model SupportTicket {
+  id           String         @id @default(uuid())
+  publicNumber String         @unique @default(uuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id])
+  kind         TicketKind     @default(OTHER)
+  status       TicketStatus   @default(OPEN)
+  subject      String
+  message      String
+  orderId      String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  adminReadAt  DateTime?
+  messages     SupportMessage[]
+
+  @@index([userId, createdAt])
+}
+
+model SupportMessage {
+  id        String        @id @default(uuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender    ActorType
+  senderId  String
+  body      String
+  internal  Boolean       @default(false)
+  createdAt DateTime      @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model CollectionRecord {
+  id             String        @id @default(uuid())
+  orderId        String        @unique
+  order          DeliveryOrder @relation(fields: [orderId], references: [id])
+  collectedMinor Int
+  goodsMinor     Int
+  deliveryMinor  Int
+  actor          ActorType
+  createdAt      DateTime      @default(now())
+}
+
+model LedgerEntry {
+  id          String           @id @default(uuid())
+  orderId     String?
+  order       DeliveryOrder?   @relation(fields: [orderId], references: [id])
+  businessId  String?
+  business    BusinessProfile? @relation(fields: [businessId], references: [id])
+  kind        String
+  amountMinor Int
+  note        String?
+  createdAt   DateTime         @default(now())
+
+  @@index([businessId, createdAt])
+  @@index([orderId])
+}
+
+model SettlementBatch {
+  id         String           @id @default(uuid())
+  businessId String
+  business   BusinessProfile  @relation(fields: [businessId], references: [id])
+  note       String?
+  createdAt  DateTime         @default(now())
+  items      SettlementItem[]
+}
+
+model SettlementItem {
+  id          String           @id @default(uuid())
+  batchId     String
+  batch       SettlementBatch  @relation(fields: [batchId], references: [id])
+  orderId     String
+  order       DeliveryOrder    @relation(fields: [orderId], references: [id])
+  amountMinor Int
+  createdAt   DateTime         @default(now())
+
+  @@unique([orderId, amountMinor, batchId])
+  @@index([orderId])
+}
+
+model OrderCancellation {
+  id        String        @id @default(uuid())
+  orderId   String        @unique
+  order     DeliveryOrder @relation(fields: [orderId], references: [id])
+  code      String
+  reason    String?
+  feeMinor  Int
+  createdAt DateTime      @default(now())
+}
+
+enum RestaurantCategory {
+  FAST_FOOD
+  PIZZA
+  BURGER
+  GRILL
+  EASTERN
+  DESSERT
+  DRINKS
+}
+
+enum RestaurantShift {
+  OPEN
+  CLOSED
+  SCHEDULED
+}
+
+enum MenuItemKind {
+  ITEM
+  COMBO
+}
+
+enum FoodOrderStatus {
+  PENDING_RESTAURANT
+  ACCEPTED
+  PREPARING
+  READY
+  REJECTED
+  CANCELLED
+}
+
+model Restaurant {
+  id                String             @id @default(uuid())
+  slug              String             @unique
+  name              String
+  cuisine           String
+  category          RestaurantCategory
+  description       String?
+  coverColor        String             @default("#087F78")
+  logoUrl           String?
+  coverUrl          String?
+  phone             String
+  addressLine       String
+  lat               Float
+  lng               Float
+  shift             RestaurantShift    @default(OPEN)
+  acceptsScheduled  Boolean            @default(false)
+  opensAt           String
+  closesAt          String
+  minOrderMinor     Int                @default(0)
+  active            Boolean            @default(true)
+  deliveryFeeMinor  Int
+  etaMinutes        Int
+  offers            RestaurantOffer[]
+  sections          MenuSection[]
+  items             MenuItem[]
+  carts             Cart[]
+  orders            FoodOrder[]
+  reviews           RestaurantReview[]
+  members           RestaurantMember[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model RestaurantOffer {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  title        String
+  percentOff   Int
+  active       Boolean    @default(true)
+}
+
+model MenuSection {
+  id           String     @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  sort         Int        @default(0)
+  items        MenuItem[]
+}
+
+model MenuItem {
+  id           String       @id @default(uuid())
+  restaurantId String
+  restaurant   Restaurant   @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  sectionId    String
+  section      MenuSection  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  imageUrl     String?
+  priceMinor   Int
+  available    Boolean      @default(true)
+  kind         MenuItemKind @default(ITEM)
+  sort         Int          @default(0)
+  groups       ItemOptionGroup[]
+}
+
+model ItemOptionGroup {
+  id        String       @id @default(uuid())
+  itemId    String
+  item      MenuItem     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  name      String
+  required  Boolean      @default(false)
+  minSelect Int          @default(0)
+  maxSelect Int          @default(1)
+  options   ItemOption[]
+}
+
+model ItemOption {
+  id         String          @id @default(uuid())
+  groupId    String
+  group      ItemOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name       String
+  priceMinor Int             @default(0)
+  available  Boolean         @default(true)
+}
+
+model Cart {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  items        CartItem[]
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([userId, restaurantId])
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  itemId    String
+  quantity  Int
+  optionIds String[]
+  note      String?
+}
+
+model FoodOrder {
+  id               String          @id @default(uuid())
+  publicNumber     String          @unique
+  idempotencyKey   String          @unique
+  userId           String
+  user             User            @relation(fields: [userId], references: [id])
+  restaurantId     String
+  restaurant       Restaurant      @relation(fields: [restaurantId], references: [id])
+  status           FoodOrderStatus @default(PENDING_RESTAURANT)
+  rejectReason     String?
+  prepMinutes      Int?
+  scheduledFor     DateTime?
+  dropoffName      String
+  dropoffLine      String
+  dropoffDetails   String?
+  dropoffLat       Float
+  dropoffLng       Float
+  recipientName    String
+  recipientPhone   String
+  notes            String?
+  preferredCourierId String?
+  foodMinor        Int
+  deliveryFeeMinor Int
+  extraMinor       Int
+  discountMinor    Int
+  totalMinor       Int
+  paymentMethod    PaymentMethod   @default(CASH)
+  deliveryOrderId  String?         @unique
+  deliveryOrder    DeliveryOrder?  @relation(fields: [deliveryOrderId], references: [id])
+  lines            FoodOrderLine[]
+  events           FoodOrderEvent[]
+  review           RestaurantReview?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([userId, status])
+  @@index([restaurantId, status])
+}
+
+model FoodOrderLine {
+  id             String    @id @default(uuid())
+  orderId        String
+  order          FoodOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemId         String
+  name           String
+  quantity       Int
+  unitMinor      Int
+  options        Json
+  note           String?
+  lineTotalMinor Int
+}
+
+model FoodOrderEvent {
+  id        String          @id @default(uuid())
+  orderId   String
+  order     FoodOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    FoodOrderStatus
+  note      String?
+  createdAt DateTime        @default(now())
+}
+
+model RestaurantReview {
+  id           String    @id @default(uuid())
+  orderId      String    @unique
+  order        FoodOrder @relation(fields: [orderId], references: [id])
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  rating       Int
+  comment      String?
+  createdAt    DateTime  @default(now())
+
+  @@index([restaurantId])
+}
+
+model RestaurantMember {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id])
+  role         MemberRole @default(STAFF)
+
+  @@unique([userId, restaurantId])
+}
+
+enum CourierAccountStatus {
+  PENDING_REVIEW
+  NEEDS_INFO
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum CourierVehicleKind {
+  MOTORCYCLE
+  CAR
+  BICYCLE
+  OTHER
+}
+
+enum CourierDocKind {
+  PORTRAIT
+  NATIONAL_ID
+  LICENSE
+  VEHICLE_REGISTRATION
+  OTHER
+}
+
+enum CourierOfferStatus {
+  OPEN
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+enum CourierSettlementKind {
+  WAGE_PAID
+  CASH_REMITTED
+  ADJUSTMENT
+}
+
+model CourierProfile {
+  id               String               @id @default(uuid())
+  userId           String               @unique
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName         String
+  email            String?
+  governorate      String
+  area             String
+  vehicle          CourierVehicleKind
+  vehicleDetails   String?
+  plate            String?
+  status           CourierAccountStatus @default(PENDING_REVIEW)
+  reviewNote       String?
+  commissionBps    Int?
+  termsAcceptedAt  DateTime
+  available        Boolean              @default(false)
+  lat              Float?
+  lng              Float?
+  locationUpdatedAt DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  documents    CourierDocument[]
+  offers       CourierOffer[]
+  earnings     CourierEarning[]
+  settlements  CourierSettlement[]
+}
+
+model CourierDocument {
+  id          String         @id @default(uuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileId   String?
+  profile     CourierProfile? @relation(fields: [profileId], references: [id])
+  kind        CourierDocKind
+  storageName String
+  createdAt   DateTime       @default(now())
+
+  @@index([userId])
+}
+
+model CourierOffer {
+  id              String             @id @default(uuid())
+  orderId         String
+  order           DeliveryOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  profileId       String
+  profile         CourierProfile     @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  status          CourierOfferStatus @default(OPEN)
+  payoutMinor     Int
+  distanceMeters  Int
+  createdAt       DateTime           @default(now())
+  respondedAt     DateTime?
+
+  @@unique([orderId, profileId])
+  @@index([profileId, status])
+}
+
+model CourierEarning {
+  id                 String         @id @default(uuid())
+  profileId          String
+  profile            CourierProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  orderId            String         @unique
+  order              DeliveryOrder  @relation(fields: [orderId], references: [id])
+  payoutMinor        Int
+  customerFeeMinor   Int
+  goodsMinor         Int
+  cashCollectedMinor Int
+  createdAt          DateTime       @default(now())
+
+  @@index([profileId, createdAt])
+}
+
+model CourierSettlement {
+  id          String                 @id @default(uuid())
+  profileId   String
+  profile     CourierProfile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  kind        CourierSettlementKind
+  amountMinor Int
+  reason      String
+  actorId     String
+  createdAt   DateTime               @default(now())
+
+  @@index([profileId, createdAt])
+}
+
+model PlatformConfig {
+  id                  Int      @id @default(1)
+  deliveryPlatformBps Int      @default(0)
+  serviceFeeMinor     Int      @default(0)
+  updatedAt           DateTime @updatedAt
+}
+
+model AdminAudit {
+  id         String   @id @default(uuid())
+  actorId    String
+  action     String
+  targetType String
+  targetId   String?
+  reason     String
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String
+  createdAt DateTime @default(now())
+}

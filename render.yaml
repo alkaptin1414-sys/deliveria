@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: deliveria-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    plan: free
+    healthCheckPath: /v1/legal/terms
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: deliveria-db
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: OTP_PEPPER
+        generateValue: true
+      - key: ENABLE_DEV_TOOLS
+        value: "false"
+
+databases:
+  - name: deliveria-db
+    plan: free
+    databaseName: deliveria
+    user: deliveria

@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: deliveria
+      POSTGRES_PASSWORD: deliveria
+      POSTGRES_DB: deliveria
+    ports:
+      - "5433:5432"
+    volumes:
+      - deliveria_pg:/var/lib/postgresql/data
+
+volumes:
+  deliveria_pg:
